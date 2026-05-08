@@ -1,22 +1,54 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { smoothEase } from "@/lib/motion-config";
 import { RelationGraph } from "@/components/relation-graph";
-import { chapters, relationEdges, relationNodes } from "@/lib/mock-data";
-import type { RelationEdge, RelationNode } from "@/lib/types";
+import { api } from "@/lib/api-client";
+import type { RelationEdge, RelationNode, Chapter } from "@/lib/types";
 
 export default function RelationsPage() {
-  const [selectedChapter, setSelectedChapter] = useState(chapters[1].id);
-  const [nodes] = useState<RelationNode[]>(relationNodes);
-  const [edges] = useState<RelationEdge[]>(relationEdges);
+  const [nodes, setNodes] = useState<RelationNode[]>([]);
+  const [edges, setEdges] = useState<RelationEdge[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<RelationNode | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [nodesData, edgesData, chaptersData] = await Promise.all([
+        api.relations.listNodes(),
+        api.relations.listEdges(),
+        api.chapters.list("work-1"),
+      ]);
+      setNodes(nodesData);
+      setEdges(edgesData);
+      setChapters(chaptersData);
+      if (chaptersData.length > 0 && !selectedChapter) {
+        setSelectedChapter(chaptersData[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load relations:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedChapter]);
+
+  useEffect(() => { loadData(); }, [loadData]);
 
   const activeEdges = selectedNode
     ? edges.filter((e) => e.source === selectedNode.id || e.target === selectedNode.id)
     : [];
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>加载中...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col">
@@ -59,14 +91,12 @@ export default function RelationsPage() {
       </div>
 
       <div className="flex flex-1 flex-col overflow-hidden p-3 sm:p-4 lg:flex-row">
-        {/* Graph */}
         <div className="flex-1">
           <div className="glass h-64 min-h-[280px] overflow-hidden rounded-xl sm:h-full sm:rounded-2xl">
             <RelationGraph nodes={nodes} edges={edges} onNodeClick={setSelectedNode} />
           </div>
         </div>
 
-        {/* Detail Panel */}
         <AnimatePresence mode="wait">
           {selectedNode ? (
             <motion.aside
@@ -94,7 +124,7 @@ export default function RelationsPage() {
                     activeEdges.map((edge) => {
                       const isSource = edge.source === selectedNode.id;
                       const otherId = isSource ? edge.target : edge.source;
-                      const other = relationNodes.find((n) => n.id === otherId);
+                      const other = nodes.find((n) => n.id === otherId);
 
                       return (
                         <div key={edge.id} className="glass-soft rounded-xl p-3 sm:p-4">

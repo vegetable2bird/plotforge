@@ -8,9 +8,10 @@ import type { Character } from "@/lib/types";
 interface Props {
   characters: Character[];
   onSelect: (char: Character) => void;
+  onCreate: () => void;
 }
 
-export function CharacterList({ characters, onSelect }: Props) {
+export function CharacterList({ characters, onSelect, onCreate }: Props) {
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
@@ -19,7 +20,7 @@ export function CharacterList({ characters, onSelect }: Props) {
             <h1 className="text-xl font-semibold text-gradient sm:text-2xl">角色档案</h1>
             <p className="mt-1 text-xs sm:text-sm" style={{ color: "var(--muted)" }}>这里用来稳住人设一致性。优先补齐动机、弱点、禁忌和成长弧光，再进入正文写作。</p>
           </div>
-          <button type="button" className="btn-accent rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5">
+          <button type="button" onClick={onCreate} className="btn-accent rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5">
             + 新建角色
           </button>
         </div>

@@ -2,18 +2,73 @@
 
 import { motion } from "framer-motion";
 import { Shield, ChevronRight, Users, Scale, Zap, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { fadeUp, staggerDelay, expandHeight, growWidth } from "@/lib/motion-config";
-import { factions } from "@/lib/mock-data";
+import { api } from "@/lib/api-client";
+import { FactionEditor } from "@/components/faction-editor";
 import type { Faction } from "@/lib/types";
 
-const factionEdges = [
-  { id: "fe-1", source: "faction-1", target: "faction-2", type: "对抗", note: "司天府与沉羽会在灰塔控制权上存在根本分歧" },
-];
+type FactionEdge = {
+  id: string;
+  sourceId: string;
+  targetId: string;
+  edgeType: string;
+  note: string;
+};
 
 export default function FactionsPage() {
+  const [factions, setFactions] = useState<Faction[]>([]);
+  const [factionEdges, setFactionEdges] = useState<FactionEdge[]>([]);
   const [selectedFaction, setSelectedFaction] = useState<Faction | null>(null);
+  const [editingFaction, setEditingFaction] = useState<Faction | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [factionsData, edgesData] = await Promise.all([
+        api.factions.list("work-1"),
+        api.factions.listEdges(),
+      ]);
+      setFactions(factionsData);
+      setFactionEdges(edgesData);
+    } catch (err) {
+      console.error("Failed to load factions:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const handleSave = async (updated: Faction) => {
+    try {
+      const result = await api.factions.update(updated.id, updated);
+      setEditingFaction(null);
+      setSelectedFaction(result);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to save faction:", err);
+    }
+  };
+
+  const handleCreate = async () => {
+    try {
+      const newFaction = await api.factions.create({
+        workId: "work-1",
+        name: "新势力",
+        stance: "",
+        doctrine: "",
+        leader: "",
+        influence: 0,
+      });
+      await loadData();
+      setSelectedFaction(newFaction);
+      setEditingFaction(newFaction);
+    } catch (err) {
+      console.error("Failed to create faction:", err);
+    }
+  };
 
   const stanceColor = (stance: string) => {
     if (stance.includes("中立")) return "text-emerald-600 bg-emerald-100/60";
@@ -21,16 +76,33 @@ export default function FactionsPage() {
     return "text-sky-600 bg-sky-100/60";
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>加载中...</p>
+      </div>
+    );
+  }
+
+  if (editingFaction) {
+    return (
+      <div className="flex h-full flex-col overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
+          <FactionEditor faction={editingFaction} onSave={handleSave} onCancel={() => setEditingFaction(null)} />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
-        {/* Header */}
         <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gradient sm:text-2xl">势力体系</h1>
             <p className="mt-1 text-xs sm:text-sm" style={{ color: "var(--muted)" }}>这里管理宏观格局。涉及阵营对抗、资源争夺或立场摇摆时，先看势力层面的变化，再落到具体角色与章节。</p>
           </div>
-          <button type="button" className="btn-accent flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5">
+          <button type="button" onClick={handleCreate} className="btn-accent flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5">
             <Plus size={14} />
             新建势力
           </button>
@@ -49,7 +121,6 @@ export default function FactionsPage() {
         </div>
 
         <div className="grid gap-5 lg:grid-cols-5">
-          {/* Faction List */}
           <div className="space-y-4 sm:space-y-5 lg:col-span-3">
             {factions.map((faction, i) => (
               <motion.button
@@ -74,7 +145,6 @@ export default function FactionsPage() {
                     </div>
                     <p className="mt-2 text-xs leading-relaxed" style={{ color: "var(--text-secondary)" }}>{faction.doctrine}</p>
 
-                    {/* Influence Bar */}
                     <div className="mt-4">
                       <div className="flex items-center justify-between">
                         <span className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--muted)" }}>影响力</span>
@@ -93,7 +163,6 @@ export default function FactionsPage() {
                   </div>
                 </div>
 
-                {/* Expanded Info */}
                 {selectedFaction?.id === faction.id && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
@@ -120,20 +189,29 @@ export default function FactionsPage() {
                       </div>
                     </div>
 
-                    {/* Relations */}
                     <div className="mt-4">
                       <p className="text-[10px] font-semibold uppercase tracking-[0.2em]" style={{ color: "var(--muted)" }}>势力关系</p>
                       <div className="mt-2 space-y-2">
-                        {factionEdges.filter((e) => e.source === faction.id || e.target === faction.id).map((edge) => (
+                        {factionEdges.filter((e) => e.sourceId === faction.id || e.targetId === faction.id).map((edge) => (
                           <div key={edge.id} className="glass-soft flex items-center justify-between rounded-lg px-3 py-2 text-xs">
                             <div className="flex items-center gap-2">
                               <Zap size={14} className="text-amber-500" />
-                              <span style={{ color: "var(--text-secondary)" }}>{edge.type}</span>
+                              <span style={{ color: "var(--text-secondary)" }}>{edge.edgeType}</span>
                             </div>
                             <ChevronRight size={14} style={{ color: "var(--muted)" }} />
                           </div>
                         ))}
                       </div>
+                    </div>
+
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setEditingFaction(faction); }}
+                        className="btn-accent rounded-lg px-3 py-2 text-xs font-medium"
+                      >
+                        编辑势力
+                      </button>
                     </div>
                   </motion.div>
                 )}
@@ -141,7 +219,6 @@ export default function FactionsPage() {
             ))}
           </div>
 
-          {/* Right Panel - Faction Overview */}
           <div className="glass hidden h-fit rounded-xl p-4 sm:rounded-2xl sm:p-5 lg:col-span-2 lg:block">
             <h3 className="text-sm font-semibold" style={{ color: "var(--text)" }}>势力总览</h3>
             <p className="mt-1 text-[11px]" style={{ color: "var(--muted)" }}>当前世界观中的势力分布</p>

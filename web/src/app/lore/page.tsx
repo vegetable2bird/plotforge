@@ -2,18 +2,27 @@
 
 import { motion } from "framer-motion";
 import { BookMarked, Search, Tag, AlertTriangle, Link, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { fadeUp, staggerDelay } from "@/lib/motion-config";
-import { loreEntries } from "@/lib/mock-data";
+import { api } from "@/lib/api-client";
 import type { LoreEntry } from "@/lib/types";
 
 const categories = ["全部", "世界法则", "历史事件", "地理风貌", "修行体系", "器物秘宝"];
 
 export default function LorePage() {
+  const [loreEntries, setLoreEntries] = useState<LoreEntry[]>([]);
   const [activeCategory, setActiveCategory] = useState("全部");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedLore, setSelectedLore] = useState<LoreEntry | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.lore.list("work-1")
+      .then((data) => setLoreEntries(data))
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
 
   const filtered = loreEntries.filter((entry) => {
     const matchCategory = activeCategory === "全部" || entry.category === activeCategory;
@@ -21,10 +30,17 @@ export default function LorePage() {
     return matchCategory && matchSearch;
   });
 
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>加载中...</p>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
-        {/* Header */}
         <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gradient sm:text-2xl">世界观库</h1>
@@ -48,9 +64,7 @@ export default function LorePage() {
           </div>
         </div>
 
-        {/* Search + Category */}
         <div className="mb-6 space-y-4 sm:mb-8">
-          {/* Search */}
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--muted)" }} />
             <input
@@ -63,7 +77,6 @@ export default function LorePage() {
             />
           </div>
 
-          {/* Categories */}
           <div className="flex flex-wrap gap-2">
             {categories.map((cat) => (
               <button
@@ -83,7 +96,6 @@ export default function LorePage() {
           </div>
         </div>
 
-        {/* Lore Grid */}
         <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
           {filtered.map((entry, i) => (
             <motion.button
@@ -116,7 +128,6 @@ export default function LorePage() {
 
               <p className="mt-3 text-[11px] leading-relaxed sm:text-xs" style={{ color: "var(--text-secondary)" }}>{entry.summary}</p>
 
-              {/* Linked Titles */}
               {entry.linkedTitles.length > 0 && (
                 <div className="mt-3 flex flex-wrap gap-1.5">
                   {entry.linkedTitles.map((linked) => (

@@ -1,13 +1,14 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 
 import { ChapterList } from "@/components/chapter-list";
 import { ChapterEditor } from "@/components/chapter-editor";
 import { AiPlotPanel } from "@/components/ai-plot-panel";
-import { plotBranches, aiSuggestions } from "@/lib/mock-data";
-import type { Chapter, ChapterContent } from "@/lib/types";
+import { api } from "@/lib/api-client";
+import { aiSuggestions, plotBranches } from "@/lib/mock-data";
+import type { Chapter, ChapterContent, Snapshot } from "@/lib/types";
 import {
   CHAPTER_CONTENT_STORAGE_KEY,
   CHAPTER_STORAGE_KEY,
@@ -20,7 +21,6 @@ import {
   readWorkspaceValue,
   subscribeWorkspace,
 } from "@/lib/workspace-storage";
-import type { Snapshot } from "@/lib/types";
 
 export default function ChaptersPage() {
   const chapterListSnapshot = useSyncExternalStore(
@@ -38,6 +38,24 @@ export default function ChaptersPage() {
     () => readWorkspaceValue(SNAPSHOT_STORAGE_KEY, defaultSnapshotList),
     () => defaultSnapshotList,
   );
+
+  const [apiChapters, setApiChapters] = useState<Chapter[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.chapters.list("work-1")
+      .then((data) => {
+        const chapters = data as Chapter[];
+        setApiChapters(chapters);
+        if (chapters.length > 0) {
+          window.localStorage.setItem(CHAPTER_STORAGE_KEY, JSON.stringify(chapters));
+          window.dispatchEvent(new Event("plotforge-workspace-storage-changed"));
+        }
+      })
+      .catch(console.error)
+      .finally(() => setLoading(false));
+  }, []);
+
   const chapterList = useMemo(() => JSON.parse(chapterListSnapshot) as Chapter[], [chapterListSnapshot]);
   const persistedChapterContents = useMemo(() => JSON.parse(chapterContentsSnapshot) as Record<string, ChapterContent[]>, [chapterContentsSnapshot]);
   const snapshotList = useMemo(() => JSON.parse(snapshotListSnapshot) as Snapshot[], [snapshotListSnapshot]);
@@ -52,6 +70,36 @@ export default function ChaptersPage() {
   const activeBranches = editingChapterId ? plotBranches.filter((b) => b.chapterId === editingChapterId) : [];
   const activeContents = editingChapterId ? (persistedChapterContents[editingChapterId] ?? []) : [];
   const activeSuggestions = editingChapterId ? aiSuggestions.filter((s) => s.chapterId === editingChapterId) : [];
+
+  const syncChapterToApi = useCallback(async (chapter: Chapter) => {
+    try {
+      await api.chapters.update(chapter.id, {
+        title: chapter.title,
+        hook: chapter.hook,
+        contentPreview: chapter.contentPreview,
+        status: chapter.status,
+        updatedAt: chapter.updatedAt,
+      });
+    } catch (err) {
+      console.error("Failed to sync chapter:", err);
+    }
+  }, []);
+
+  const syncContentToApi = useCallback(async (chapterId: string, contents: ChapterContent[]) => {
+    try {
+      const existingData = await api.chapters.contents(chapterId);
+      const existing = existingData as ChapterContent[];
+      const updates = contents.filter((c) => existing.some((e) => e.id === c.id));
+      const creates = contents.filter((c) => !existing.some((e) => e.id === c.id));
+
+      await Promise.all([
+        ...updates.map((c) => api.chapters.updateContent(c.id, { title: c.title, content: c.content })),
+        ...creates.map((c) => api.chapters.createContent(chapterId, c)),
+      ]);
+    } catch (err) {
+      console.error("Failed to sync contents:", err);
+    }
+  }, []);
 
   function openChapterEditor(chapterId: string) {
     const initialContent = persistedChapterContents[chapterId]?.[0];
@@ -74,39 +122,44 @@ export default function ChaptersPage() {
     setNewChapterHook("");
   }
 
-  function confirmCreateChapter() {
+  async function confirmCreateChapter() {
     const nextOrder = chapterList.length > 0
       ? Math.max(...chapterList.map((c) => c.orderIndex)) + 1
       : 1;
-    const newChapterId = `chapter-${Date.now()}`;
     const newContentId = `content-${nextOrder}-1`;
-    const newChapter: Chapter = {
-      id: newChapterId,
-      workId: "work-1",
-      title: newChapterTitle || `第 ${nextOrder} 章`,
-      orderIndex: nextOrder,
-      status: "draft",
-      hook: newChapterHook,
-      contentPreview: "",
-      branchCount: 0,
-      updatedAt: "刚刚",
-    };
-    const nextChapterList = [...chapterList, newChapter];
-    const nextChapterContents: Record<string, ChapterContent[]> = {
-      ...persistedChapterContents,
-      [newChapterId]: [
-        {
-          id: newContentId,
-          title: "正文片段 1",
-          content: "",
-        },
-      ],
-    };
 
-    persistWorkspaceState(nextChapterList, nextChapterContents);
-    setEditingChapterId(newChapterId);
-    setActiveContentId(newContentId);
-    setShowCreateModal(false);
+    try {
+      const newChapter = await api.chapters.create({
+        workId: "work-1",
+        title: newChapterTitle || `第 ${nextOrder} 章`,
+        orderIndex: nextOrder,
+        status: "draft",
+        hook: newChapterHook,
+        contentPreview: "",
+        branchCount: 0,
+        updatedAt: "刚刚",
+      }) as Chapter;
+
+      await api.chapters.createContent(newChapter.id, {
+        id: newContentId,
+        title: "正文片段 1",
+        content: "",
+      });
+
+      const updatedChapters = await api.chapters.list("work-1");
+      const chaptersData = updatedChapters as Chapter[];
+      setApiChapters(chaptersData);
+      window.localStorage.setItem(CHAPTER_STORAGE_KEY, JSON.stringify(chaptersData));
+      const contents = await api.chapters.contents(newChapter.id);
+      window.localStorage.setItem(CHAPTER_CONTENT_STORAGE_KEY, JSON.stringify({ [newChapter.id]: contents }));
+      window.dispatchEvent(new Event("plotforge-workspace-storage-changed"));
+
+      setEditingChapterId(newChapter.id);
+      setActiveContentId(newContentId);
+      setShowCreateModal(false);
+    } catch (err) {
+      console.error("Failed to create chapter:", err);
+    }
   }
 
   function handleContentChange(contentId: string, content: string) {
@@ -132,6 +185,7 @@ export default function ChaptersPage() {
     ));
 
     persistWorkspaceState(nextChapterList, nextChapterContents);
+    syncContentToApi(editingChapterId, nextChapterContents[editingChapterId] ?? []);
   }
 
   function handleCreateSnapshotFromChapter() {
@@ -158,10 +212,17 @@ export default function ChaptersPage() {
     window.location.href = "/snapshots";
   }
 
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>加载中...</p>
+      </div>
+    );
+  }
+
   if (editingChapter) {
     return (
       <div className="relative flex h-full flex-col lg:flex-row">
-        {/* Mobile AI Panel Toggle */}
         <button
           type="button"
           onClick={() => setShowAiPanel(!showAiPanel)}
@@ -171,7 +232,6 @@ export default function ChaptersPage() {
           AI 辅助
         </button>
 
-        {/* Mobile AI Panel Overlay */}
         {showAiPanel && (
           <div
             className="fixed inset-0 z-30 bg-black/20 backdrop-blur-sm lg:hidden"
@@ -179,7 +239,6 @@ export default function ChaptersPage() {
           />
         )}
 
-        {/* Mobile AI Panel Drawer */}
         <div
           className={`fixed bottom-0 left-0 right-0 z-40 max-h-[60vh] overflow-y-auto border-t backdrop-blur-xl transition-transform duration-300 lg:hidden ${showAiPanel ? "translate-y-0" : "translate-y-full"}`}
           style={{ background: "var(--panel-bg)", borderColor: "var(--panel-border)" }}
@@ -203,7 +262,6 @@ export default function ChaptersPage() {
           </div>
         </div>
 
-        {/* Main Editor */}
         <div className="flex-1">
           <ChapterEditor
             chapter={editingChapter}
@@ -217,7 +275,6 @@ export default function ChaptersPage() {
           />
         </div>
 
-        {/* Desktop AI Panel */}
         <div className="hidden w-[360px] shrink-0 overflow-y-auto border-l p-3 xl:block xl:w-[420px] xl:p-4" style={{ borderColor: "color-mix(in srgb, var(--panel-border) 72%, transparent)" }}>
           <AiPlotPanel
             branches={activeBranches}
@@ -234,7 +291,6 @@ export default function ChaptersPage() {
     <>
       <ChapterList chapters={chapterList} onEditChapter={openChapterEditor} onCreateChapter={handleCreateChapter} />
 
-      {/* Create Chapter Modal */}
       <AnimatePresence>
         {showCreateModal && (
           <>

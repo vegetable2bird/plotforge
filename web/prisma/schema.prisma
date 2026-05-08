@@ -1,0 +1,261 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model Work {
+  id        String   @id @default(cuid())
+  title     String
+  genre     String
+  stage     String
+  summary   String   @default("")
+  theme     String   @default("obsidian")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  characters     Character[]
+  chapters       Chapter[]
+  scenes         Scene[]
+  loreEntries    LoreEntry[]
+  factions       Faction[]
+  snapshots      Snapshot[]
+  aiRecords      AiGenerationRecord[]
+  conflictRecords ConflictRecord[]
+
+  @@map("works")
+}
+
+model Character {
+  id          String   @id @default(cuid())
+  workId      String
+  name        String
+  role        String   @default("")
+  appearance  String   @default("")
+  personality String   @default("")
+  backstory   String   @default("")
+  habits      String   @default("[]")
+  catchphrase String   @default("")
+  weakness    String   @default("")
+  mission     String   @default("")
+  taboo       String   @default("")
+  arc         String   @default("")
+  biography   String   @default("")
+  avatar      String   @default("")
+  tags        String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  work          Work           @relation(fields: [workId], references: [id], onDelete: Cascade)
+  relationNodes RelationNode[]
+
+  @@map("characters")
+}
+
+model Chapter {
+  id             String   @id @default(cuid())
+  workId         String
+  title          String
+  orderIndex     Int      @default(0)
+  status         String   @default("draft")
+  hook           String   @default("")
+  contentPreview String   @default("")
+  branchCount    Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  work       Work            @relation(fields: [workId], references: [id], onDelete: Cascade)
+  contents   ChapterContent[]
+  branches   PlotBranch[]
+  suggestions AiSuggestion[]
+
+  @@map("chapters")
+}
+
+model ChapterContent {
+  id        String   @id @default(cuid())
+  chapterId String
+  title     String   @default("")
+  content   String   @default("")
+  branchId  String?
+  orderIndex Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@map("chapter_contents")
+}
+
+model PlotBranch {
+  id           String   @id @default(cuid())
+  chapterId    String
+  title        String
+  summary      String   @default("")
+  tension      String   @default("medium")
+  aiGenerated  Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@map("plot_branches")
+}
+
+model AiSuggestion {
+  id        String   @id @default(cuid())
+  chapterId String
+  type      String   @default("continuation")
+  label     String
+  content   String   @default("")
+  tension   String   @default("medium")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+
+  @@map("ai_suggestions")
+}
+
+model Scene {
+  id           String   @id @default(cuid())
+  workId       String
+  name         String
+  environment  String   @default("")
+  weather      String   @default("")
+  timeSetting  String   @default("")
+  dangerZones  String   @default("[]")
+  residents    String   @default("[]")
+  chapterId    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@map("scenes")
+}
+
+model LoreEntry {
+  id           String   @id @default(cuid())
+  workId       String
+  category     String
+  title        String
+  summary      String   @default("")
+  linkedTitles String   @default("[]")
+  riskLevel    String   @default("stable")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@map("lore_entries")
+}
+
+model Faction {
+  id         String   @id @default(cuid())
+  workId     String
+  name       String
+  stance     String   @default("")
+  doctrine   String   @default("")
+  leader     String   @default("")
+  influence  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  work      Work         @relation(fields: [workId], references: [id], onDelete: Cascade)
+  edgesFrom FactionEdge[] @relation("FactionEdgeSource")
+  edgesTo   FactionEdge[] @relation("FactionEdgeTarget")
+
+  @@map("factions")
+}
+
+model FactionEdge {
+  id        String   @id @default(cuid())
+  sourceId  String
+  targetId  String
+  edgeType  String   @default("")
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  source Faction @relation("FactionEdgeSource", fields: [sourceId], references: [id], onDelete: Cascade)
+  target Faction @relation("FactionEdgeTarget", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@map("faction_edges")
+}
+
+model Snapshot {
+  id        String   @id @default(cuid())
+  workId    String
+  scopeType String
+  title     String
+  summary   String   @default("")
+  data      String   @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@map("snapshots")
+}
+
+model AiGenerationRecord {
+  id           String   @id @default(cuid())
+  workId       String
+  moduleType   String
+  model        String
+  promptDigest String   @default("")
+  status       String   @default("ready")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@map("ai_generation_records")
+}
+
+model ConflictRecord {
+  id         String   @id @default(cuid())
+  workId     String
+  sourceType String
+  title      String
+  message    String   @default("")
+  severity   String   @default("medium")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  work Work @relation(fields: [workId], references: [id], onDelete: Cascade)
+
+  @@map("conflict_records")
+}
+
+model RelationNode {
+  id          String   @id @default(cuid())
+  characterId String
+  label       String
+  avatar      String   @default("")
+  x           Float    @default(0)
+  y           Float    @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  character Character @relation(fields: [characterId], references: [id], onDelete: Cascade)
+
+  @@map("relation_nodes")
+}
+
+model RelationEdge {
+  id            String   @id @default(cuid())
+  sourceId      String
+  targetId      String
+  relationType  String
+  intimacyLevel Int      @default(0)
+  conflictLevel Int      @default(0)
+  note          String   @default("")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("relation_edges")
+}

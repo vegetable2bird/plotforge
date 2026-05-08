@@ -90,5 +90,20 @@ Agent 在任务执行过程中发现的条目应遵循以下格式：
 - Category: 代码模式
 - Instructions:
   - 工作区存储已抽到 `src/lib/workspace-storage.ts`，统一管理章节、正文片段和快照的 localStorage 读写与订阅。
-  - 快照列表使用 `plotforge-snapshots` 持久化，章节编辑页可直接创建“当前章节快照”并跳转到快照中心。
+  - 快照列表使用 `plotforge-snapshots` 持久化，章节编辑页可直接创建"当前章节快照"并跳转到快照中心。
   - 从章节页跳转到快照页时，当前新建快照通过 sessionStorage 高亮选中，便于用户立即确认是否创建成功。
+
+[PlotForge 数据层已接入 SQLite + Prisma，采用 Repository 模式]
+- Date: 2026-05-08
+- Context: Agent 在执行数据库接入和 CRUD 接口开发时发现
+- Category: 代码结构
+- Instructions:
+  - 数据库使用 SQLite，通过 Prisma 7 + @prisma/adapter-better-sqlite3 适配器连接
+  - 数据库文件位于 `prisma/dev.db`，迁移和 schema 在 `prisma/schema.prisma`
+  - Repository 模式已实现在 `src/lib/repositories/`，每个实体有独立的 repository
+  - 统一入口在 `src/lib/repositories/index.ts` 导出 `repositories` 对象
+  - 前端 API 客户端在 `src/lib/api-client.ts`，封装了所有 CRUD 调用
+  - API Routes 在 `src/app/api/` 下，使用 Next.js App Router
+  - 数组字段（如 habits、tags、dangerZones）在数据库中存储为 JSON 字符串
+  - Prisma 配置在 `prisma.config.ts`，使用 defineConfig 定义 datasource URL
+  - 种子脚本 `prisma/seed.ts` 用于初始化示例数据，使用 `npx tsx prisma/seed.ts` 执行

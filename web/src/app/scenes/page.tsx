@@ -2,26 +2,98 @@
 
 import { motion } from "framer-motion";
 import { Map, CloudRain, Clock, AlertTriangle, Users, Plus } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { fadeUp, staggerDelay, expandHeight } from "@/lib/motion-config";
-import { chapters, scenes } from "@/lib/mock-data";
-import type { Scene } from "@/lib/types";
+import { api } from "@/lib/api-client";
+import { SceneEditor } from "@/components/scene-editor";
+import type { Scene, Chapter } from "@/lib/types";
 
 export default function ScenesPage() {
-  const [selectedChapter, setSelectedChapter] = useState(chapters[1].id);
+  const [scenes, setScenes] = useState<Scene[]>([]);
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [selectedChapter, setSelectedChapter] = useState<string | null>(null);
   const [selectedScene, setSelectedScene] = useState<Scene | null>(null);
+  const [editingScene, setEditingScene] = useState<Scene | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [scenesData, chaptersData] = await Promise.all([
+        api.scenes.list("work-1"),
+        api.chapters.list("work-1"),
+      ]);
+      setScenes(scenesData);
+      setChapters(chaptersData);
+      if (chaptersData.length > 0 && !selectedChapter) {
+        setSelectedChapter(chaptersData[0].id);
+      }
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedChapter]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const handleSave = async (updated: Scene) => {
+    try {
+      const result = await api.scenes.update(updated.id, updated);
+      setEditingScene(null);
+      setSelectedScene(result);
+      await loadData();
+    } catch (err) {
+      console.error("Failed to save scene:", err);
+    }
+  };
+
+  const handleCreate = async () => {
+    try {
+      const newScene = await api.scenes.create({
+        workId: "work-1",
+        name: "新场景",
+        environment: "",
+        weather: "",
+        timeSetting: "",
+        dangerZones: [],
+        residents: [],
+      });
+      await loadData();
+      setSelectedScene(newScene);
+      setEditingScene(newScene);
+    } catch (err) {
+      console.error("Failed to create scene:", err);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>加载中...</p>
+      </div>
+    );
+  }
+
+  if (editingScene) {
+    return (
+      <div className="flex h-full flex-col overflow-y-auto">
+        <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
+          <SceneEditor scene={editingScene} onSave={handleSave} onCancel={() => setEditingScene(null)} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-full flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
-        {/* Header */}
         <div className="mb-6 flex flex-col gap-3 sm:mb-8 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h1 className="text-xl font-semibold text-gradient sm:text-2xl">场景沙盘</h1>
             <p className="mt-1 text-xs sm:text-sm" style={{ color: "var(--muted)" }}>这里负责空间调度。打戏、追逐、潜入和多人同场时，先在这里把位置关系和危险区理顺，再写正文。</p>
           </div>
-          <button type="button" className="btn-accent flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5">
+          <button type="button" onClick={handleCreate} className="btn-accent flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5">
             <Plus size={14} />
             新建场景
           </button>
@@ -39,26 +111,26 @@ export default function ScenesPage() {
           </div>
         </div>
 
-        {/* Chapter Selector */}
-        <div className="mb-6 flex flex-wrap items-center gap-2 sm:mb-8">
-          {chapters.map((chapter) => (
-            <button
-              key={chapter.id}
-              type="button"
-              onClick={() => { setSelectedChapter(chapter.id); setSelectedScene(null); }}
-              className="glass rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all duration-200 sm:px-4 sm:py-2 sm:text-sm"
-              style={{
-                borderColor: selectedChapter === chapter.id ? "var(--panel-border-hover)" : "transparent",
-                background: selectedChapter === chapter.id ? "var(--panel-bg-hover)" : "transparent",
-                color: selectedChapter === chapter.id ? "var(--text)" : "var(--muted)",
-              }}
-            >
-              {chapter.title}
-            </button>
-          ))}
-        </div>
+        {chapters.length > 0 && (
+          <div className="mb-6 flex flex-wrap items-center gap-2 sm:mb-8">
+            {chapters.map((chapter) => (
+              <button
+                key={chapter.id}
+                type="button"
+                onClick={() => { setSelectedChapter(chapter.id); setSelectedScene(null); }}
+                className="glass rounded-lg px-3 py-1.5 text-[11px] font-medium transition-all duration-200 sm:px-4 sm:py-2 sm:text-sm"
+                style={{
+                  borderColor: selectedChapter === chapter.id ? "var(--panel-border-hover)" : "transparent",
+                  background: selectedChapter === chapter.id ? "var(--panel-bg-hover)" : "transparent",
+                  color: selectedChapter === chapter.id ? "var(--text)" : "var(--muted)",
+                }}
+              >
+                {chapter.title}
+              </button>
+            ))}
+          </div>
+        )}
 
-        {/* Scenes Grid */}
         <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
           {scenes.map((scene, i) => (
             <motion.button
@@ -95,7 +167,6 @@ export default function ScenesPage() {
                 </div>
               </div>
 
-              {/* Residents */}
               <div className="mt-4">
                 <div className="flex items-center gap-2">
                   <Users size={14} style={{ color: "var(--muted)" }} />
@@ -108,7 +179,6 @@ export default function ScenesPage() {
                 </div>
               </div>
 
-              {/* Danger Zones - expand on click */}
               {selectedScene?.id === scene.id && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
@@ -126,6 +196,15 @@ export default function ScenesPage() {
                         {zone}
                       </div>
                     ))}
+                  </div>
+                  <div className="mt-4 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); setEditingScene(scene); }}
+                      className="btn-accent rounded-lg px-3 py-2 text-xs font-medium"
+                    >
+                      编辑场景
+                    </button>
                   </div>
                 </motion.div>
               )}
