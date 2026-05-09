@@ -1,14 +1,14 @@
 import type { Chapter, ChapterContent, Snapshot } from "@/lib/types";
-import { chapterContents, chapters, snapshots } from "@/lib/mock-data";
 
 export const CHAPTER_STORAGE_KEY = "plotforge-chapters";
 export const CHAPTER_CONTENT_STORAGE_KEY = "plotforge-chapter-contents";
 export const SNAPSHOT_STORAGE_KEY = "plotforge-snapshots";
 export const WORKSPACE_STORAGE_EVENT = "plotforge-workspace-storage-changed";
 
-export const defaultChapterSnapshot = JSON.stringify(chapters);
-export const defaultContentSnapshot = JSON.stringify(chapterContents);
-export const defaultSnapshotList = JSON.stringify(snapshots);
+// 默认值改为空数组，不再依赖 mock-data
+export const defaultChapterSnapshot = JSON.stringify([]);
+export const defaultContentSnapshot = JSON.stringify({});
+export const defaultSnapshotList = JSON.stringify([]);
 
 export function subscribeWorkspace(onStoreChange: () => void) {
   if (typeof window === "undefined") {

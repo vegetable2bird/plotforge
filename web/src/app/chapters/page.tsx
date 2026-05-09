@@ -7,8 +7,7 @@ import { ChapterList } from "@/components/chapter-list";
 import { ChapterEditor } from "@/components/chapter-editor";
 import { AiPlotPanel } from "@/components/ai-plot-panel";
 import { api } from "@/lib/api-client";
-import { aiSuggestions, plotBranches } from "@/lib/mock-data";
-import type { Chapter, ChapterContent, Snapshot } from "@/lib/types";
+import type { Chapter, ChapterContent, Snapshot, AiSuggestion, PlotBranch } from "@/lib/types";
 import {
   CHAPTER_CONTENT_STORAGE_KEY,
   CHAPTER_STORAGE_KEY,
@@ -40,16 +39,25 @@ export default function ChaptersPage() {
   );
 
   const [apiChapters, setApiChapters] = useState<Chapter[]>([]);
+  const [allSuggestions, setAllSuggestions] = useState<AiSuggestion[]>([]);
+  const [allBranches, setAllBranches] = useState<PlotBranch[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.chapters.list("work-1")
-      .then((data) => {
-        const chapters = data as Chapter[];
-        setApiChapters(chapters);
-        if (chapters.length > 0) {
-          window.localStorage.setItem(CHAPTER_STORAGE_KEY, JSON.stringify(chapters));
-          window.dispatchEvent(new Event("plotforge-workspace-storage-changed"));
+    const workId = "default-work"; // TODO: 从路由/上下文获取当前 workId
+    Promise.allSettled([
+      api.chapters.list(workId),
+      // suggestions 和 branches 暂时通过章节内容关联获取
+      // 后续可扩展独立 API 端点
+    ])
+      .then(([chaptersResult]) => {
+        if (chaptersResult.status === "fulfilled") {
+          const chapters = chaptersResult.value as Chapter[];
+          setApiChapters(chapters);
+          if (chapters.length > 0) {
+            window.localStorage.setItem(CHAPTER_STORAGE_KEY, JSON.stringify(chapters));
+            window.dispatchEvent(new Event("plotforge-workspace-storage-changed"));
+          }
         }
       })
       .catch(console.error)
@@ -60,16 +68,16 @@ export default function ChaptersPage() {
   const persistedChapterContents = useMemo(() => JSON.parse(chapterContentsSnapshot) as Record<string, ChapterContent[]>, [chapterContentsSnapshot]);
   const snapshotList = useMemo(() => JSON.parse(snapshotListSnapshot) as Snapshot[], [snapshotListSnapshot]);
   const [editingChapterId, setEditingChapterId] = useState<string | null>(null);
-  const [activeContentId, setActiveContentId] = useState("content-89-1");
+  const [activeContentId, setActiveContentId] = useState<string>("");
   const [showAiPanel, setShowAiPanel] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState("");
   const [newChapterHook, setNewChapterHook] = useState("");
 
   const editingChapter = chapterList.find((c) => c.id === editingChapterId);
-  const activeBranches = editingChapterId ? plotBranches.filter((b) => b.chapterId === editingChapterId) : [];
+  const activeBranches = editingChapterId ? allBranches.filter((b) => b.chapterId === editingChapterId) : [];
   const activeContents = editingChapterId ? (persistedChapterContents[editingChapterId] ?? []) : [];
-  const activeSuggestions = editingChapterId ? aiSuggestions.filter((s) => s.chapterId === editingChapterId) : [];
+  const activeSuggestions = editingChapterId ? allSuggestions.filter((s) => s.chapterId === editingChapterId) : [];
 
   const syncChapterToApi = useCallback(async (chapter: Chapter) => {
     try {
@@ -130,7 +138,7 @@ export default function ChaptersPage() {
 
     try {
       const newChapter = await api.chapters.create({
-        workId: "work-1",
+        workId: "default-work", // TODO: 从路由/上下文获取
         title: newChapterTitle || `第 ${nextOrder} 章`,
         orderIndex: nextOrder,
         status: "draft",
@@ -146,7 +154,7 @@ export default function ChaptersPage() {
         content: "",
       });
 
-      const updatedChapters = await api.chapters.list("work-1");
+      const updatedChapters = await api.chapters.list("default-work");
       const chaptersData = updatedChapters as Chapter[];
       setApiChapters(chaptersData);
       window.localStorage.setItem(CHAPTER_STORAGE_KEY, JSON.stringify(chaptersData));

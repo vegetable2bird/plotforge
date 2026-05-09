@@ -1,17 +1,30 @@
 export type ThemeName = "cloud" | "mint" | "lavender" | "obsidian" | "ember" | "jade";
 
-export type WorkSummary = {
+export type User = {
   id: string;
+  email: string;
+  name: string;
+  avatar: string;
+  createdAt: string;
+};
+
+export type Work = {
+  id: string;
+  userId: string;
   title: string;
   genre: string;
-  stage: string;
+  stage: "planning" | "drafting" | "polishing" | "completed";
   summary: string;
-  theme: string;
+  theme: ThemeName;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type WorkSummary = Work & {
   chapterCount: number;
   characterCount: number;
   loreCount: number;
   factionCount: number;
-  updatedAt: string;
 };
 
 export type Character = {

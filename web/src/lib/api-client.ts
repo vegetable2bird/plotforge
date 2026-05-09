@@ -12,7 +12,28 @@ async function apiFetch<T>(url: string, options?: RequestInit): Promise<T> {
   return res.json() as T;
 }
 
+import type { Character, Scene, Faction, Chapter, ChapterContent, LoreEntry, Work, User, Snapshot, ConflictRecord, AiGenerationRecord } from "@/lib/types";
+
 export const api = {
+  auth: {
+    login: (email: string, password: string) =>
+      apiFetch<User>("/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
+    register: (email: string, name: string, password: string) =>
+      apiFetch<User>("/api/auth/register", { method: "POST", body: JSON.stringify({ email, name, password }) }),
+  },
+
+  works: {
+    list: (userId?: string) =>
+      apiFetch<Work[]>(`/api/works${userId ? `?userId=${userId}` : ""}`),
+    get: (id: string) => apiFetch<Work>(`/api/works/${id}`),
+    create: (data: Omit<Work, "id" | "createdAt" | "updatedAt">) =>
+      apiFetch<Work>("/api/works", { method: "POST", body: JSON.stringify(data) }),
+    update: (id: string, data: Partial<Omit<Work, "id" | "createdAt" | "updatedAt">>) =>
+      apiFetch<Work>(`/api/works/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      apiFetch<{ success: boolean }>(`/api/works/${id}`, { method: "DELETE" }),
+  },
+
   characters: {
     list: (workId?: string) =>
       apiFetch<Character[]>(`/api/characters${workId ? `?workId=${workId}` : ""}`),
@@ -103,9 +124,35 @@ export const api = {
     deleteEdge: (id: string) =>
       apiFetch<{ success: boolean }>(`/api/relations/edges/${id}`, { method: "DELETE" }),
   },
-};
 
-import type { Character, Scene, Faction, Chapter, ChapterContent, LoreEntry } from "@/lib/types";
+  snapshots: {
+    list: (workId?: string) =>
+      apiFetch<Snapshot[]>(`/api/snapshots${workId ? `?workId=${workId}` : ""}`),
+    create: (data: Record<string, unknown>) =>
+      apiFetch<Snapshot>("/api/snapshots", { method: "POST", body: JSON.stringify(data) }),
+  },
+
+  conflicts: {
+    list: (workId?: string) =>
+      apiFetch<ConflictRecord[]>(`/api/conflicts${workId ? `?workId=${workId}` : ""}`),
+    create: (data: Record<string, unknown>) =>
+      apiFetch<ConflictRecord>("/api/conflicts", { method: "POST", body: JSON.stringify(data) }),
+  },
+
+  aiRecords: {
+    list: (workId?: string) =>
+      apiFetch<AiGenerationRecord[]>(`/api/ai-records${workId ? `?workId=${workId}` : ""}`),
+    create: (data: Record<string, unknown>) =>
+      apiFetch<AiGenerationRecord>("/api/ai-records", { method: "POST", body: JSON.stringify(data) }),
+  },
+
+  ai: {
+    continue: (data: { workId: string; chapterId: string; content: string; context?: string }) =>
+      apiFetch<{ id: string; chapterId: string; type: string; label: string; content: string; tension: string }>("/api/ai/continue", { method: "POST", body: JSON.stringify(data) }),
+    conflictCheck: (data: { workId: string; content: string; sourceType?: string }) =>
+      apiFetch<{ conflicts: Array<{ title: string; message: string; severity: string }>; summary: { total: number; high: number; medium: number } }>("/api/ai/conflict-check", { method: "POST", body: JSON.stringify(data) }),
+  },
+};
 
 type FactionEdgeType = {
   id: string;

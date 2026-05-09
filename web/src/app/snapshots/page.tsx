@@ -2,60 +2,67 @@
 
 import { motion } from "framer-motion";
 import { Clock, RotateCcw, Eye, Trash2, ArrowDownToLine, Plus } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 import { fadeUp, staggerDelay } from "@/lib/motion-config";
+import { api } from "@/lib/api-client";
 import type { Snapshot } from "@/lib/types";
-import {
-  SNAPSHOT_STORAGE_KEY,
-  defaultSnapshotList,
-  persistSnapshots,
-  readWorkspaceValue,
-  subscribeWorkspace,
-} from "@/lib/workspace-storage";
 
 export default function SnapshotsPage() {
-  const snapshotListSnapshot = useSyncExternalStore(
-    subscribeWorkspace,
-    () => readWorkspaceValue(SNAPSHOT_STORAGE_KEY, defaultSnapshotList),
-    () => defaultSnapshotList,
-  );
-  const snapshotList = useMemo(() => JSON.parse(snapshotListSnapshot) as Snapshot[], [snapshotListSnapshot]);
-  const [manualSelectedSnapshotId, setManualSelectedSnapshotId] = useState<string | null>(null);
-  const highlightedSnapshotId = useSyncExternalStore(
-    subscribeWorkspace,
-    () => {
-      if (typeof window === "undefined") {
-        return "";
-      }
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
+  const [selectedSnapshotId, setSelectedSnapshotId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
 
-      return window.sessionStorage.getItem("plotforge-highlight-snapshot") ?? "";
-    },
-    () => "",
-  );
-  const selectedSnapshotId = manualSelectedSnapshotId ?? highlightedSnapshotId;
-  const selectedSnapshot = snapshotList.find((item) => item.id === selectedSnapshotId) ?? null;
+  const loadSnapshots = useCallback(async () => {
+    try {
+      const data = await api.snapshots.list(); // TODO: 传入当前 workId
+      setSnapshots(data);
+    } catch (err) {
+      console.error("加载快照失败:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  function handleCreateSnapshot() {
-    const nextSnapshot: Snapshot = {
-      id: `snapshot-${Date.now()}`,
-      workId: "work-1",
-      scopeType: "工作区",
-      title: "手动工作区快照",
-      summary: "保留当前工作区状态，便于在大改或试验前快速回退。",
-      createdAt: "刚刚",
-    };
+  useEffect(() => {
+    loadSnapshots();
+  }, [loadSnapshots]);
 
-    persistSnapshots([nextSnapshot, ...snapshotList]);
-    setManualSelectedSnapshotId(nextSnapshot.id);
+  const selectedSnapshot = snapshots.find((item) => item.id === selectedSnapshotId) ?? null;
+
+  async function handleCreateSnapshot() {
+    try {
+      const newSnapshot = await api.snapshots.create({
+        workId: "default-work", // TODO: 从上下文获取
+        scopeType: "工作区",
+        title: `手动工作区快照 ${new Date().toLocaleString("zh-CN")}`,
+        summary: "保留当前工作区状态，便于在大改或试验前快速回退。",
+      });
+      await loadSnapshots();
+      setSelectedSnapshotId(newSnapshot.id);
+    } catch (err) {
+      console.error("创建快照失败:", err);
+    }
   }
 
-  function handleDeleteSnapshot(snapshotId: string) {
-    const nextSnapshots = snapshotList.filter((item) => item.id !== snapshotId);
-    persistSnapshots(nextSnapshots);
-    if (selectedSnapshot?.id === snapshotId) {
-      setManualSelectedSnapshotId(null);
+  async function handleDeleteSnapshot(snapshotId: string) {
+    try {
+      // 快照删除 API（如果有的话），目前先从前端列表移除
+      setSnapshots((prev) => prev.filter((item) => item.id !== snapshotId));
+      if (selectedSnapshot?.id === snapshotId) {
+        setSelectedSnapshotId(null);
+      }
+    } catch (err) {
+      console.error("删除快照失败:", err);
     }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <p className="text-sm" style={{ color: "var(--muted)" }}>加载中...</p>
+      </div>
+    );
   }
 
   return (
@@ -67,7 +74,7 @@ export default function SnapshotsPage() {
             <h1 className="text-xl font-semibold text-gradient sm:text-2xl">快照中心</h1>
             <p className="mt-1 text-xs sm:text-sm" style={{ color: "var(--muted)" }}>这里负责安全试错。大改章节、重写人物弧光或尝试激进分支前，先留一个快照，避免改崩后无处回退。</p>
           </div>
-          <button type="button" onClick={handleCreateSnapshot} className="btn-accent flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5">
+          <button type="button" onClick={handleCreateSnapshot} className="btn-accent flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium sm:px-5 cursor-pointer">
             <Plus size={14} />
             创建快照
           </button>
@@ -87,7 +94,7 @@ export default function SnapshotsPage() {
 
         {/* Snapshot List */}
         <div className="space-y-4 sm:space-y-5">
-          {snapshotList.map((snapshot, i) => (
+          {snapshots.map((snapshot, i) => (
             <motion.div
               key={snapshot.id}
               initial={{ opacity: 0, y: 16 }}
@@ -108,22 +115,22 @@ export default function SnapshotsPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-[11px] leading-relaxed sm:text-xs" style={{ color: "var(--text-secondary)" }}>{snapshot.summary}</p>
-                    <p className="mt-2 text-[10px] font-medium" style={{ color: "var(--muted)" }}>创建于 {snapshot.createdAt}</p>
+                    <p className="mt-2 text-[10px] font-medium" style={{ color: "var(--muted)" }}>创建于 {new Date(snapshot.createdAt).toLocaleString("zh-CN")}</p>
                   </div>
                 </div>
 
                 {/* Actions */}
                 <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setManualSelectedSnapshotId(snapshot.id)} className="glass hover-lift rounded-lg p-2 transition-all duration-200" style={{ color: "var(--text-secondary)" }}>
+                  <button type="button" onClick={() => setSelectedSnapshotId(snapshot.id)} className="glass hover-lift rounded-lg p-2 transition-all duration-200 cursor-pointer" style={{ color: "var(--text-secondary)" }}>
                     <Eye size={16} />
                   </button>
-                  <button type="button" className="glass hover-lift rounded-lg p-2 transition-all duration-200" style={{ color: "var(--text-secondary)" }}>
+                  <button type="button" className="glass hover-lift rounded-lg p-2 transition-all duration-200 cursor-pointer" style={{ color: "var(--text-secondary)" }}>
                     <RotateCcw size={16} />
                   </button>
-                  <button type="button" className="glass hover-lift rounded-lg p-2 transition-all duration-200" style={{ color: "var(--text-secondary)" }}>
+                  <button type="button" className="glass hover-lift rounded-lg p-2 transition-all duration-200 cursor-pointer" style={{ color: "var(--text-secondary)" }}>
                     <ArrowDownToLine size={16} />
                   </button>
-                  <button type="button" onClick={() => handleDeleteSnapshot(snapshot.id)} className="glass hover-lift rounded-lg p-2 transition-all duration-200" style={{ color: "var(--text-secondary)" }}>
+                  <button type="button" onClick={() => handleDeleteSnapshot(snapshot.id)} className="glass hover-lift rounded-lg p-2 transition-all duration-200 cursor-pointer" style={{ color: "var(--text-secondary)" }}>
                     <Trash2 size={16} />
                   </button>
                 </div>
@@ -131,7 +138,7 @@ export default function SnapshotsPage() {
             </motion.div>
           ))}
 
-          {snapshotList.length === 0 && (
+          {snapshots.length === 0 && (
             <div className="glass rounded-2xl px-5 py-10 text-center">
               <Clock size={28} className="mx-auto" style={{ color: "var(--muted)" }} />
               <p className="mt-3 text-sm font-medium" style={{ color: "var(--text)" }}>还没有可用快照</p>

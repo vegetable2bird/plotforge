@@ -27,7 +27,7 @@ export default function FactionsPage() {
   const loadData = useCallback(async () => {
     try {
       const [factionsData, edgesData] = await Promise.all([
-        api.factions.list("work-1"),
+        api.factions.list(), // TODO: 传入当前 workId
         api.factions.listEdges(),
       ]);
       setFactions(factionsData);
@@ -55,7 +55,7 @@ export default function FactionsPage() {
   const handleCreate = async () => {
     try {
       const newFaction = await api.factions.create({
-        workId: "work-1",
+        workId: "default-work", // TODO: 从上下文获取
         name: "新势力",
         stance: "",
         doctrine: "",

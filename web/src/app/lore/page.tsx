@@ -18,7 +18,7 @@ export default function LorePage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    api.lore.list("work-1")
+    api.lore.list() // TODO: 传入当前 workId
       .then((data) => setLoreEntries(data))
       .catch(console.error)
       .finally(() => setLoading(false));

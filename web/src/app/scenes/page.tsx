@@ -20,8 +20,8 @@ export default function ScenesPage() {
   const loadData = useCallback(async () => {
     try {
       const [scenesData, chaptersData] = await Promise.all([
-        api.scenes.list("work-1"),
-        api.chapters.list("work-1"),
+        api.scenes.list(), // TODO: 传入当前 workId
+        api.chapters.list(), // TODO: 传入当前 workId
       ]);
       setScenes(scenesData);
       setChapters(chaptersData);
@@ -51,7 +51,7 @@ export default function ScenesPage() {
   const handleCreate = async () => {
     try {
       const newScene = await api.scenes.create({
-        workId: "work-1",
+        workId: "default-work", // TODO: 从上下文获取
         name: "新场景",
         environment: "",
         weather: "",
